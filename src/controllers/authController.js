@@ -50,6 +50,7 @@ const registerUser = async (req, res) => {
                 name: user.name,
                 email: user.email,
                 accessToken,
+                stripeCustomerId: user.stripeCustomerId
             });
         } else {
             res.status(400).json({ message: 'Invalid user data' });
@@ -81,6 +82,7 @@ const loginUser = async (req, res) => {
                 accessToken,
             });
         } else {
+            console.log("Invalid email or password");
             res.status(401).json({ message: 'Invalid email or password' });
         }
     } catch (error) {
@@ -105,6 +107,7 @@ const logoutUser = async (req, res) => {
         });
         res.status(200).json({ message: 'Logged out successfully' });
     } catch (error) {
+        console.log("Error in Logout :", error);
         res.status(500).json({ message: error.message });
     }
 };
@@ -126,7 +129,7 @@ const refreshToken = async (req, res) => {
         const accessToken = generateAccessToken(user._id);
         res.json({ accessToken });
     } catch (error) {
-        console.error(error);
+        console.log("Error in Refresh Token :", error);
         res.status(401).json({ message: 'Not authorized, token failed' });
     }
 };
@@ -145,6 +148,7 @@ const getUserProfile = async (req, res) => {
             res.status(404).json({ message: 'User not found' });
         }
     } catch (error) {
+        console.log("Error in Get User Profile :", error);
         res.status(500).json({ message: error.message });
     }
 };

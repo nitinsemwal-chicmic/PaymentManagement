@@ -1,53 +1,27 @@
-const express = require('express');
 const dotenv = require('dotenv');
+dotenv.config();
+const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db.js');
 const {errorHandler,notfound} = require('./middlewares/errorMiddleware.js');
 const authRoutes = require('./routes/authRoutes.js');
+const paymentRoutes = require('./routes/paymentRoutes.js');
+const webhookRoutes = require('./routes/webhookRoutes.js');
 
-dotenv.config();
 connectDB();
 
 const app = express();
 app.use(cors());
 
-// Stripe Webhook Endpoint (MUST be before express.json() for raw body access)
-app.post('/webhook', express.raw({ type: 'application/json' }), (req, res) => {
-    const stripe = require('./config/stripe');
-    const sig = req.headers['stripe-signature'];
-    let event;
-
-    try {
-        event = stripe.webhooks.constructEvent(
-            req.body,
-            sig,
-            process.env.STRIPE_WEBHOOK_SECRET
-        );
-    } catch (err) {
-        console.error(`Webhook Error: ${err.message}`);
-        return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    // Handle the event
-    switch (event.type) {
-        case 'payment_intent.succeeded':
-            const paymentIntent = event.data.object;
-            console.log('PaymentIntent was successful!');
-            break;
-        default:
-            console.log(`Unhandled event type ${event.type}`);
-    }
-
-    res.json({ received: true });
-});
-
-app.use(express.json());
-
-app.use('/auth', authRoutes);
-
 app.get('/',(req,res)=>{
     res.send('Stripe Payment Backend API is Running');
 });
+
+// Mount routes
+app.use('/webhooks', webhookRoutes);
+app.use(express.json()); // Apply express.json() after webhooks to avoid parsing raw body
+app.use('/auth', authRoutes);
+app.use('/payments', paymentRoutes);
 
 app.use(notfound);
 app.use(errorHandler);
