@@ -1,5 +1,6 @@
 const stripe = require('../config/stripe');
 const Transaction = require('../models/Transaction');
+const Subscription = require('../models/Subscription');
 
 const handleStripeWebhook = async (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -42,6 +43,33 @@ const handleStripeWebhook = async (req, res) => {
                     { new: true }
                 );
                 console.log(`Transaction Failed: ${dataObject.id}`);
+                break;
+
+            case 'customer.subscription.created':
+            case 'customer.subscription.updated':
+                // Update subscription in database
+                await Subscription.findOneAndUpdate(
+                    { stripeSubscriptionId: dataObject.id },
+                    { 
+                        status: dataObject.status,
+                        currentPeriodEnd: new Date(dataObject.current_period_end * 1000)
+                    },
+                    { upsert: true, new: true }
+                );
+                console.log(`Subscription Updated/Created: ${dataObject.id}`);
+                break;
+
+            case 'customer.subscription.deleted':
+                // Update subscription status to canceled
+                await Subscription.findOneAndUpdate(
+                    { stripeSubscriptionId: dataObject.id },
+                    { 
+                        status: 'canceled',
+                        currentPeriodEnd: new Date(dataObject.current_period_end * 1000)
+                    },
+                    { new: true }
+                );
+                console.log(`Subscription Deleted: ${dataObject.id}`);
                 break;
 
             default:
