@@ -1,5 +1,6 @@
 const User = require('../models/User');
 const jwt = require('jsonwebtoken');
+const stripe = require('../config/stripe');
 const { generateAccessToken, generateRefreshToken } = require('../utils/generateToken');
 
 // Helper to set cookies
@@ -15,13 +16,14 @@ const setCookies = (res, accessToken, refreshToken) => {
 const registerUser = async (req, res) => {
     try {
         const { name, email, password } = req.body;
+        // :TODO Validations (JOI)
         const userExists = await User.findOne({ email });
         if (userExists) {
             return res.status(400).json({ message: 'User already exists' });
         }
-
-        const stripe = require('../config/stripe');
-        console.log("Customer Not Yet Created");
+        
+        console.log("Before Creating Customer");
+        
         // Create Stripe Customer
         const customer = await stripe.customers.create({
             email,
@@ -35,12 +37,13 @@ const registerUser = async (req, res) => {
             password,
             stripeCustomerId: customer.id
         });
-
         console.log("User Created");
+
         if (user) {
+            console.log("Inside Test");
             const accessToken = generateAccessToken(user._id);
             const refreshToken = generateRefreshToken(user._id);
-
+            
             // Save refresh token in DB
             user.refreshToken = refreshToken;
             await user.save()
@@ -105,6 +108,7 @@ const logoutUser = async (req, res) => {
             httpOnly: true,
             expires: new Date(0),
         });
+        console.log("User Logged out Successfully")
         res.status(200).json({ message: 'Logged out successfully' });
     } catch (error) {
         console.log("Error in Logout :", error);
@@ -127,6 +131,7 @@ const refreshToken = async (req, res) => {
         }
 
         const accessToken = generateAccessToken(user._id);
+        console.log("Refreshing new Token")
         res.json({ accessToken });
     } catch (error) {
         console.log("Error in Refresh Token :", error);

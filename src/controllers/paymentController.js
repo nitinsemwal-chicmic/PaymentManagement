@@ -1,20 +1,32 @@
 const Transaction = require('../models/Transaction');
+const User = require('../models/User');
 const stripe = require('../config/stripe');
 
 const createPaymentIntent = async (req, res) => {
     try {
         const { amount, currency = 'usd' } = req.body;
-        const user = req.user;
+        let user = req.user;
 
         if (!amount || amount <= 0) {
             return res.status(400).json({ message: 'Invalid amount' });
         }
         console.log(user);
-        if (!user.id) { // it's not user.stripeCustomerId
-            return res.status(400).json({ message: 'User does not have a Stripe Customer ID' });
+        
+        if (!user.stripeCustomerId) {
+            console.log(`Creating Stripe customer for user: ${user.email}`);
+            const customer = await stripe.customers.create({
+                email: user.email,
+                name: user.name,
+            });
+            
+            // Update new Stripe Customer ID
+            await User.findByIdAndUpdate(user._id, { stripeCustomerId: customer.id });
+            user.stripeCustomerId = customer.id;
+            console.log(`Stripe customer created: ${customer.id}`);
         }
 
-        // Create a PaymentIntent with the order amount and currency
+        console.log("Processing payment for user:", user.email, "Stripe ID:", user.stripeCustomerId);
+
         const paymentIntent = await stripe.paymentIntents.create({
             amount,
             currency,
@@ -24,7 +36,6 @@ const createPaymentIntent = async (req, res) => {
             },
         });
 
-        // Create a pending transaction record
         const transaction = await Transaction.create({
             userId: user._id,
             stripePaymentIntentId: paymentIntent.id,

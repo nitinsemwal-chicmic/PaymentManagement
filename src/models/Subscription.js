@@ -22,7 +22,7 @@ const subscriptionSchema = new mongoose.Schema({
     },
     currentPeriodEnd: {
         type: Date,
-        required: true
+        required: false
     }
 }, { timestamps: true });
 
