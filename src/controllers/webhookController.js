@@ -11,6 +11,7 @@ const handleStripeWebhook = async (req, res) => {
             sig,
             process.env.STRIPE_WEBHOOK_SECRET
         );
+        console.log("Webhook Signature Verified Successfully");
     } catch (err) {
         console.error(`Webhook Signature Verification Failed: ${err.message}`);
         return res.status(400).send(`Webhook Error: ${err.message}`);
@@ -18,7 +19,7 @@ const handleStripeWebhook = async (req, res) => {
 
     // Extract the object from the event
     const dataObject = event.data.object;
-
+    console.log("DataObject from Webhook:",dataObject);
     console.log(`Received Webhook Event: ${event.type}`);
 
     try {
