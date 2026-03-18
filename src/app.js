@@ -6,6 +6,7 @@ const connectDB = require('./config/db.js');
 const {errorHandler,notfound} = require('./middlewares/errorMiddleware.js');
 const authRoutes = require('./routes/authRoutes.js');
 const paymentRoutes = require('./routes/paymentRoutes.js');
+const subscriptionRoutes = require('./routes/subscriptionRoutes.js');
 const webhookRoutes = require('./routes/webhookRoutes.js');
 
 connectDB();
@@ -22,6 +23,7 @@ app.use('/webhooks', webhookRoutes);
 app.use(express.json()); // Apply express.json() after webhooks to avoid parsing raw body
 app.use('/auth', authRoutes);
 app.use('/payments', paymentRoutes);
+app.use('/subscriptions', subscriptionRoutes);
 
 app.use(notfound);
 app.use(errorHandler);
