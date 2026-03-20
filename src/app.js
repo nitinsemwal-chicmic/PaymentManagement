@@ -9,12 +9,18 @@ const paymentRoutes = require('./routes/paymentRoutes.js');
 const subscriptionRoutes = require('./routes/subscriptionRoutes.js');
 const webhookRoutes = require('./routes/webhookRoutes.js');
 const cookieParser = require('cookie-parser');
+const csrfProtection = require('./middlewares/csrfMiddleware.js');
 
 connectDB();
 
 const app = express();
 app.use(cors());
 app.use(cookieParser());
+
+app.get('/api/csrf-token', csrfProtection, (req, res) => {
+    res.json({ csrfToken: req.csrfToken() });
+});
+
 app.get('/',(req,res)=>{
     res.send('Stripe Payment Backend API is Running');
 });

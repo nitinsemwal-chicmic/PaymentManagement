@@ -1,26 +1,28 @@
 const Subscription = require('../models/Subscription');
 const User = require('../models/User');
 const stripe = require('../config/stripe');
+const STATUS = require('../constants/statusCodes');
+const MSG = require('../constants/errorMessages');
 
 const createSubscription = async (req, res) => {
     try {
         const { priceId, planName } = req.body;
 
-        // Find user
         const user = await User.findById(req.user._id);
         if (!user) {
-            return res.status(404).json({ message: 'User not found' });
+            return res.status(STATUS.NOT_FOUND).json({ message: MSG.USER_NOT_FOUND });
         }
 
         if (!priceId || !planName) {
-            return res.status(400).json({ message: 'Price ID and Plan Name are required' });
+            return res.status(STATUS.BAD_REQUEST).json({
+                message: MSG.SUBSCRIPTION_REQUIRED_FIELDS
+            });
         }
-
-        // Create subscription in Stripe
+        // Subscription Creations,
         const subscription = await stripe.subscriptions.create({
             customer: user.stripeCustomerId,
             items: [{ price: priceId }],
-            payment_behavior: 'default_incomplete', // allows incompletes too
+            payment_behavior: 'default_incomplete',
             expand: ['latest_invoice.payment_intent'],
         });
 
@@ -31,21 +33,25 @@ const createSubscription = async (req, res) => {
         const newSubscription = await Subscription.create({
             userId: user._id,
             stripeSubscriptionId: subscription.id,
-            planName: planName,
+            planName,
             status: subscription.status,
-            currentPeriodEnd: currentPeriodEnd
+            currentPeriodEnd
         });
 
-        const clientSecret = subscription.latest_invoice?.payment_intent?.client_secret || null;
+        const clientSecret =
+            subscription.latest_invoice?.payment_intent?.client_secret || null;
 
-        res.status(201).json({
+        res.status(STATUS.CREATED).json({
             subscriptionId: subscription.id,
-            clientSecret: clientSecret,
+            clientSecret,
             dbSubscription: newSubscription
         });
+
     } catch (error) {
-        console.error('Error Occured while Creating Subscriptions :', error);
-        res.status(500).json({ message: error.message });
+        console.log("Error Occurred While Subscription Creation:", error);
+        res.status(STATUS.SERVER_ERROR).json({
+            message: MSG.SUBSCRIPTION_CREATION_FAILED
+        });
     }
 };
 
@@ -55,51 +61,63 @@ const cancelSubscription = async (req, res) => {
 
         const deletedSubscription = await stripe.subscriptions.cancel(subscriptionId);
 
-        // Safely get current period end
         const currentPeriodEnd = deletedSubscription.current_period_end
             ? new Date(deletedSubscription.current_period_end * 1000)
             : null;
 
-        // Update in DB
         const subscription = await Subscription.findOneAndUpdate(
             { stripeSubscriptionId: subscriptionId },
-            { 
+            {
                 status: deletedSubscription.status,
-                currentPeriodEnd: currentPeriodEnd
+                currentPeriodEnd
             },
             { new: true }
         );
 
         if (!subscription) {
-            return res.status(404).json({ message: 'Subscription not found in database :) ' });
+            return res.status(STATUS.NOT_FOUND).json({
+                message: MSG.SUBSCRIPTION_NOT_FOUND
+            });
         }
-        res.json({ message: 'Subscription canceled successfully', subscription });
+
+        res.status(STATUS.SUCCESS).json({
+            message: MSG.SUBSCRIPTION_CANCEL_SUCCESS,
+            subscription
+        });
+
     } catch (error) {
         console.error('Error while canceling subscription:', error);
-        res.status(500).json({ message: error.message });
+        res.status(STATUS.SERVER_ERROR).json({
+            message: MSG.SUBSCRIPTION_CANCEL_FAILED
+        });
     }
 };
 
-const getMe = async (req, res) => {
+const mySubscription = async (req, res) => {
     try {
-        const subscription = await Subscription.findOne({ 
+        const subscription = await Subscription.findOne({
             userId: req.user._id,
-            status: 'active' 
+            status: 'active'
         }).sort({ createdAt: -1 });
 
         if (!subscription) {
-            return res.status(404).json({ message: 'No active subscription found for You :) ' });
+            return res.status(STATUS.NOT_FOUND).json({
+                message: MSG.NO_ACTIVE_SUBSCRIPTION
+            });
         }
-        console.log('Current Subscription is :',subscription);
-        res.json(subscription);
+
+        res.status(STATUS.SUCCESS).json(subscription);
+
     } catch (error) {
-        console.error('Error While fetching subscription:', error);
-        res.status(500).json({ message: error.message });
+        console.error('Error while fetching subscription:', error);
+        res.status(STATUS.SERVER_ERROR).json({
+            message: MSG.SERVER_ERROR
+        });
     }
 };
 
 module.exports = {
     createSubscription,
     cancelSubscription,
-    getMe
+    mySubscription
 };

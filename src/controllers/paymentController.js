@@ -1,6 +1,8 @@
 const Transaction = require('../models/Transaction');
 const User = require('../models/User');
 const stripe = require('../config/stripe');
+const STATUS = require('../constants/statusCodes');
+const MSG = require('../constants/errorMessages');
 
 const createPaymentIntent = async (req, res) => {
     try {
@@ -8,28 +10,22 @@ const createPaymentIntent = async (req, res) => {
         let user = req.user;
 
         if (!amount || amount <= 0) {
-            return res.status(400).json({ message: 'Invalid amount' });
+            return res.status(STATUS.BAD_REQUEST).json({ message: MSG.INVALID_AMOUNT });
         }
-        console.log(user);
-        
+
         if (!user.stripeCustomerId) {
-            console.log(`Creating Stripe customer for user: ${user.email}`);
             const customer = await stripe.customers.create({
                 email: user.email,
                 name: user.name,
             });
             
-            // Update new Stripe Customer ID
             await User.findByIdAndUpdate(user._id, { stripeCustomerId: customer.id });
             user.stripeCustomerId = customer.id;
-            console.log(`Stripe customer created: ${customer.id}`);
         }
-
-        console.log("Processing payment for user:", user.email, "Stripe ID:", user.stripeCustomerId);
 
         const paymentIntent = await stripe.paymentIntents.create({
             amount,
-            currency,
+            currency, // Anything Passed
             customer: user.stripeCustomerId,
             automatic_payment_methods: {
                 enabled: true,
@@ -45,22 +41,32 @@ const createPaymentIntent = async (req, res) => {
             type: 'one-time'
         });
 
-        res.json({
+        res.status(STATUS.SUCCESS).json({
             clientSecret: paymentIntent.client_secret,
             transactionId: transaction._id
         });
+
     } catch (error) {
         console.error("Error creating payment intent:", error);
-        res.status(500).json({ message: error.message });
+        res.status(STATUS.SERVER_ERROR).json({
+            message: MSG.PAYMENT_INTENT_FAILED
+        });
     }
 };
 
 const getPaymentHistory = async (req, res) => {
     try {
-        const transactions = await Transaction.find({ userId: req.user._id }).sort({ createdAt: -1 });
-        res.json(transactions);
+        const transactions = await Transaction
+            .find({ userId: req.user._id })
+            .sort({ createdAt: -1 });
+
+        res.status(STATUS.SUCCESS).json(transactions);
+
     } catch (error) {
-        res.status(500).json({ message: error.message });
+        console.error("Error fetching transactions:", error);
+        res.status(STATUS.SERVER_ERROR).json({
+            message: MSG.FETCH_TRANSACTIONS_FAILED
+        });
     }
 };
 
