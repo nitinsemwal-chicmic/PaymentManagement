@@ -18,11 +18,11 @@ const setCookies = (res, accessToken, refreshToken) => {
 const registerUser = async (req, res) => {
     try {
         const { name, email, password } = req.body;
-        
+
         if (!name || !email || !password) {
             return res.status(STATUS.BAD_REQUEST).json({ message: MSG.REQUIRED_FIELDS });
         }
-        
+
         const userExists = await User.findOne({ email });
         if (userExists) {
             return res.status(STATUS.BAD_REQUEST).json({ message: MSG.USER_EXISTS });
@@ -40,26 +40,20 @@ const registerUser = async (req, res) => {
             stripeCustomerId: customer.id
         });
 
-        if (user) {
-            const accessToken = generateAccessToken(user._id);
-            const refreshToken = generateRefreshToken(user._id);
+        const accessToken = generateAccessToken(user._id);
+        const refreshToken = generateRefreshToken(user._id);
 
-            // store refresh token in array
-            user.refreshTokens.push({ token: refreshToken });
-            await user.save();
+        user.refreshTokens.push({ token: refreshToken });
+        await user.save();
 
-            setCookies(res, accessToken, refreshToken);
-            res.status(STATUS.CREATED).json({
-                _id: user._id,
-                name: user.name,
-                email: user.email,
-                accessToken,
-                stripeCustomerId: user.stripeCustomerId
-            });
-        } else {
-            console.log("User Not Created");
-            res.status(STATUS.BAD_REQUEST).json({ message: MSG.INVALID_CREDENTIALS });
-        }
+        setCookies(res, accessToken, refreshToken);
+        res.status(STATUS.CREATED).json({
+            _id: user._id,
+            name: user.name,
+            email: user.email,
+            accessToken,
+            stripeCustomerId: user.stripeCustomerId
+        });
     } catch (error) {
         console.log("Error Occurred While Registration:", error);
         res.status(STATUS.SERVER_ERROR).json({ message: MSG.SERVER_ERROR });
@@ -76,7 +70,8 @@ const loginUser = async (req, res) => {
 
         const user = await User.findOne({ email }).select('+password');
         // console.log("user is :", user);
-        
+
+        // If User is Valid and Password Correct
         if (user && (await user.matchPassword(password))) {
             const accessToken = generateAccessToken(user._id);
             const refreshToken = generateRefreshToken(user._id);
@@ -107,13 +102,13 @@ const logoutUser = async (req, res) => {
         const refreshToken = req.cookies.jwt;
 
         if (refreshToken) {
-            const user = await User.findOne({ refreshToken });
-            if (user) {
-                user.refreshToken = null; // Only That Session.
-                await user.save();
-            }
+            // Find and Remove that Token from Array
+            await User.findOneAndUpdate(
+                { 'refreshTokens.token': refreshToken },
+                { $pull: { refreshTokens: { token: refreshToken } } }
+            );
         }
-
+        // Clear Cookie
         res.cookie('jwt', '', {
             httpOnly: true,
             expires: new Date(0),

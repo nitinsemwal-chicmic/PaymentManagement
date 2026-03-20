@@ -8,12 +8,15 @@ const authRoutes = require('./routes/authRoutes.js');
 const paymentRoutes = require('./routes/paymentRoutes.js');
 const subscriptionRoutes = require('./routes/subscriptionRoutes.js');
 const webhookRoutes = require('./routes/webhookRoutes.js');
+const invoiceRoutes = require('./routes/invoiceRoutes.js');
 const cookieParser = require('cookie-parser');
 const csrfProtection = require('./middlewares/csrfMiddleware.js');
+const { apiLimiter } = require('./middlewares/rateLimitMiddleware.js');
 
 connectDB();
 
 const app = express();
+app.use(apiLimiter);
 app.use(cors());
 app.use(cookieParser());
 
@@ -31,6 +34,7 @@ app.use(express.json()); // Apply express.json() after webhooks to avoid parsing
 app.use('/auth', authRoutes);
 app.use('/payments', paymentRoutes);
 app.use('/subscriptions', subscriptionRoutes);
+app.use('/invoices', invoiceRoutes)
 
 app.use(notfound);
 app.use(errorHandler);

@@ -8,7 +8,8 @@ const invoiceSchema = new mongoose.Schema({
     },
     stripeInvoiceId: {
         type: String,
-        required: true
+        required: true,
+        unique: true
     },
     stripeCustomerId: String,
     subscriptionId: {
@@ -25,5 +26,8 @@ const invoiceSchema = new mongoose.Schema({
         default: Date.now
     }
 });
+
+invoiceSchema.index({ userId: 1, createdAt: -1 });
+invoiceSchema.index({ stripeCustomerId: 1 });
 
 module.exports = mongoose.model('Invoice', invoiceSchema);

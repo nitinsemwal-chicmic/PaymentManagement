@@ -18,6 +18,18 @@ const createSubscription = async (req, res) => {
                 message: MSG.SUBSCRIPTION_REQUIRED_FIELDS
             });
         }
+
+        // Create Stripe Customer if not exists
+        if (!user.stripeCustomerId) {
+            const customer = await stripe.customers.create({
+                email: user.email,
+                name: user.name,
+            });
+
+            await User.findByIdAndUpdate(user._id, { stripeCustomerId: customer.id });
+            user.stripeCustomerId = customer.id;
+        }
+
         // Subscription Creations,
         const subscription = await stripe.subscriptions.create({
             customer: user.stripeCustomerId,

@@ -18,7 +18,7 @@ const createPaymentIntent = async (req, res) => {
                 email: user.email,
                 name: user.name,
             });
-            
+
             await User.findByIdAndUpdate(user._id, { stripeCustomerId: customer.id });
             user.stripeCustomerId = customer.id;
         }
