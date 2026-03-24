@@ -1,9 +1,9 @@
 const dotenv = require('dotenv');
-dotenv.config({quiet : true});
+dotenv.config({ quiet: true });
 const express = require('express');
 const cors = require('cors');
 const connectDB = require('./config/db.js');
-const {errorHandler,notfound} = require('./middlewares/errorMiddleware.js');
+const { errorHandler, notfound } = require('./middlewares/errorMiddleware.js');
 const authRoutes = require('./routes/authRoutes.js');
 const paymentRoutes = require('./routes/paymentRoutes.js');
 const subscriptionRoutes = require('./routes/subscriptionRoutes.js');
@@ -24,7 +24,7 @@ app.get('/api/csrf-token', csrfProtection, (req, res) => {
     res.json({ csrfToken: req.csrfToken() });
 });
 
-app.get('/',(req,res)=>{
+app.get('/', (req, res) => {
     res.send('Stripe Payment Backend API is Running');
 });
 

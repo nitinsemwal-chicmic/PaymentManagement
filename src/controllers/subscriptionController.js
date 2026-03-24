@@ -73,14 +73,14 @@ const cancelSubscription = async (req, res) => {
 
         const deletedSubscription = await stripe.subscriptions.cancel(subscriptionId);
 
+        // Subscription End Date
         const currentPeriodEnd = deletedSubscription.current_period_end
             ? new Date(deletedSubscription.current_period_end * 1000)
             : null;
-
         const subscription = await Subscription.findOneAndUpdate(
             { stripeSubscriptionId: subscriptionId },
             {
-                status: deletedSubscription.status,
+                status: 'canceled',
                 currentPeriodEnd
             },
             { new: true }

@@ -6,39 +6,39 @@ const User = require('../models/User');
 const STATUS = require('../constants/statusCodes');
 const MSG = require('../constants/errorMessages');
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
 const findUser = async (customerId, email) => {
+    console.log(`[DEBUG] Finding user: customerId=${customerId}, email=${email}`);
     let user = await User.findOne({ stripeCustomerId: customerId });
     if (!user && email) {
         user = await User.findOne({ email: email.toLowerCase() });
         if (user) {
             user.stripeCustomerId = customerId;
             await user.save();
-            console.log(`Synced stripeCustomerId for user: ${email}`);
+            console.log(`[DEBUG] Synced stripeCustomerId for user: ${email}`);
         }
     }
+    if (!user) console.warn(`[DEBUG] No user found for customerId=${customerId}, email=${email}`);
+    else console.log(`[DEBUG] User found: ${user._id}`);
     return user;
 };
 
-/**
- * Saves or updates an Invoice document in MongoDB.
- * @param {string} invoiceId   - The value used as stripeInvoiceId (Stripe invoice ID or charge ID for one-time)
- * @param {object} fields      - Fields to upsert
- */
+
 const saveInvoice = async (invoiceId, fields) => {
-    return Invoice.findOneAndUpdate(
-        { stripeInvoiceId: invoiceId },
-        fields,
-        { upsert: true, new: true }
-    );
+    console.log(`[DEBUG] saveInvoice called: invoiceId=${invoiceId}`, JSON.stringify(fields, null, 2));
+    try {
+        const result = await Invoice.findOneAndUpdate(
+            { stripeInvoiceId: invoiceId },
+            fields,
+            { upsert: true, new: true }
+        );
+        console.log(`[DEBUG] saveInvoice success: resultId=${result._id}`);
+        return result;
+    } catch (error) {
+        console.error(`[DEBUG] saveInvoice FAILED: error=${error.message}`);
+        throw error;
+    }
 };
 
-/**
- * Saves or updates a Transaction document in MongoDB.
- * @param {string} paymentIntentId
- * @param {object} fields
- */
 const saveTransaction = async (paymentIntentId, fields) => {
     return Transaction.findOneAndUpdate(
         { stripePaymentIntentId: paymentIntentId },
@@ -46,8 +46,6 @@ const saveTransaction = async (paymentIntentId, fields) => {
         { upsert: true, new: true }
     );
 };
-
-// ─── Main Webhook Handler ─────────────────────────────────────────────────────
 
 const handleStripeWebhook = async (req, res) => {
     const sig = req.headers['stripe-signature'];
@@ -134,25 +132,31 @@ const handleStripeWebhook = async (req, res) => {
             //
             // Flow for subscription payments:
             //   invoice.created → invoice.finalized → invoice.payment_succeeded → invoice.paid
-            //
-            // We handle all four so the invoice record is created early and
-            // updated as its status progresses. The transaction is only written
-            // once a payment_intent exists (i.e. on payment_succeeded / paid).
+
             case 'invoice.created':
             case 'invoice.finalized':
             case 'invoice.payment_succeeded':
             case 'invoice.paid': {
+                console.log(`[DEBUG] Processing invoice event: ${event.type} for invoice ${obj.id}`);
                 const user = await findUser(obj.customer, obj.customer_email);
+
                 if (!user) {
-                    console.warn(`No user found for invoice ${obj.id} (customer: ${obj.customer})`);
+                    console.warn(`[DEBUG] No user found for invoice ${obj.id} (customer: ${obj.customer})`);
                     break;
                 }
 
                 // 1. Save / update invoice record
+                console.log(`[DEBUG] Attempting to save invoice ${obj.id} for user ${user._id}`);
+                console.log("Object For Debugging: ", obj);
+
+                const subscriptionId = typeof obj.subscription === 'string'
+                    ? obj.subscription
+                    : obj.subscription?.id || obj.subscription || null;
+
                 await saveInvoice(obj.id, {
                     userId: user._id,
                     stripeCustomerId: obj.customer,
-                    subscriptionId: obj.subscription || null,
+                    subscriptionId: obj.subscriptionId,
                     amountPaid: obj.amount_paid ? obj.amount_paid / 100 : 0,
                     currency: obj.currency,
                     status: obj.status,
@@ -171,6 +175,7 @@ const handleStripeWebhook = async (req, res) => {
                     paymentIntentId &&
                     (event.type === 'invoice.payment_succeeded' || event.type === 'invoice.paid')
                 ) {
+                    console.log(`[DEBUG] Saving transaction for paymentIntent ${paymentIntentId}`);
                     await saveTransaction(paymentIntentId, {
                         userId: user._id,
                         amount: obj.amount_paid / 100,
@@ -179,22 +184,17 @@ const handleStripeWebhook = async (req, res) => {
                         type: 'subscription',
                     });
 
-                    console.log(`Transaction saved for invoice ${obj.id} (pi: ${paymentIntentId})`);
+                    console.log(`[DEBUG] Transaction saved for invoice ${obj.id} (pi: ${paymentIntentId})`);
                 }
 
-                console.log(`Invoice ${obj.id} [${event.type}] saved for user ${user._id}`);
+                console.log(`[DEBUG] Invoice ${obj.id} [${event.type}] processing complete for user ${user._id}`);
                 break;
             }
 
-            // ── Charge (one-time payments only) ──────────────────────────────
-            //
-            // Only creates an invoice record when the charge has NO linked
-            // Stripe invoice — subscription charges are already covered above.
             case 'charge.succeeded': {
-                // Skip — the invoice event handler covers subscription charges.
-                // This block only handles standalone (one-time) charges.
+                console.log(`[DEBUG] Processing charge.succeeded: ${obj.id}`);
                 if (obj.invoice) {
-                    console.log(`Charge ${obj.id} is linked to invoice ${obj.invoice}; skipping duplicate invoice creation`);
+                    console.log(`[DEBUG] Charge ${obj.id} is linked to invoice ${obj.invoice}; skipping duplicate invoice creation`);
                     break;
                 }
 
@@ -203,11 +203,12 @@ const handleStripeWebhook = async (req, res) => {
                 const chargeUser = await findUser(obj.customer, chargeEmail);
 
                 if (!chargeUser) {
-                    console.warn(`No user found for one-time charge ${obj.id}`);
+                    console.warn(`[DEBUG] No user found for one-time charge ${obj.id}`);
                     break;
                 }
 
                 // 1. Save pseudo-invoice (using charge ID as the invoice identifier)
+                console.log(`[DEBUG] Attempting to save one-time pseudo-invoice for charge ${obj.id}`);
                 await saveInvoice(obj.id, {
                     userId: chargeUser._id,
                     stripeCustomerId: obj.customer,
@@ -227,6 +228,7 @@ const handleStripeWebhook = async (req, res) => {
                         : obj.payment_intent?.id;
 
                 if (piId) {
+                    console.log(`[DEBUG] Saving transaction for charge pi: ${piId}`);
                     await saveTransaction(piId, {
                         userId: chargeUser._id,
                         amount: obj.amount / 100,
@@ -236,7 +238,7 @@ const handleStripeWebhook = async (req, res) => {
                     });
                 }
 
-                console.log(`One-time charge ${obj.id} and transaction saved for user ${chargeUser._id}`);
+                console.log(`[DEBUG] One-time charge ${obj.id} and transaction saved for user ${chargeUser._id}`);
                 break;
             }
 
