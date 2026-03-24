@@ -12,6 +12,7 @@ const invoiceRoutes = require('./routes/invoiceRoutes.js');
 const cookieParser = require('cookie-parser');
 const csrfProtection = require('./middlewares/csrfMiddleware.js');
 const { apiLimiter } = require('./middlewares/rateLimitMiddleware.js');
+const refundRoutes = require('./routes/refundRoutes');
 
 connectDB();
 
@@ -19,6 +20,7 @@ const app = express();
 app.use(apiLimiter);
 app.use(cors());
 app.use(cookieParser());
+
 
 app.get('/api/csrf-token', csrfProtection, (req, res) => {
     res.json({ csrfToken: req.csrfToken() });
@@ -35,6 +37,7 @@ app.use('/auth', authRoutes);
 app.use('/payments', paymentRoutes);
 app.use('/subscriptions', subscriptionRoutes);
 app.use('/invoices', invoiceRoutes)
+app.use('/refunds', refundRoutes);
 
 app.use(notfound);
 app.use(errorHandler);
